@@ -1,0 +1,25 @@
+{
+	"name": "parquet",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "pioneers_blob",
+			"type": "LinkedServiceReference"
+		},
+		"annotations": [],
+		"type": "Parquet",
+		"typeProperties": {
+			"location": {
+				"type": "AzureBlobStorageLocation",
+				"fileName": {
+					"value": "@{pipeline().Pipeline}_@{utcnow('yyyy-MM-ddTHH-mm-ss-fffffffK')}.parquet",
+					"type": "Expression"
+				},
+				"folderPath": "parquet",
+				"container": "merchant"
+			},
+			"compressionCodec": "snappy"
+		},
+		"schema": []
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

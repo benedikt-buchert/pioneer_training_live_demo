@@ -1,0 +1,275 @@
+{
+	"name": "watermarking_test",
+	"properties": {
+		"activities": [
+			{
+				"name": "DB_To_Parquet",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "check_new_watermark",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "Set variable1",
+						"dependencyConditions": [
+							"Succeeded",
+							"Skipped"
+						]
+					},
+					{
+						"activity": "check_old_watermark",
+						"dependencyConditions": [
+							"Completed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "SELECT * FROM retail\nWHERE modified_at > '@{variables('watermark')}'\nAND modified_at <= '@{activity('check_new_watermark').output.firstRow.watermark}'",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"sink": {
+						"type": "ParquetSink",
+						"storeSettings": {
+							"type": "AzureBlobStorageWriteSettings"
+						},
+						"formatSettings": {
+							"type": "ParquetWriteSettings"
+						}
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"mappings": [
+							{
+								"source": {
+									"name": "stock_code",
+									"type": "String",
+									"physicalType": "character varying"
+								},
+								"sink": {
+									"name": "stock_code",
+									"type": "String",
+									"physicalType": "UTF8"
+								}
+							},
+							{
+								"source": {
+									"name": "invoice_no",
+									"type": "String",
+									"physicalType": "character varying"
+								},
+								"sink": {
+									"name": "invoice_no",
+									"type": "String",
+									"physicalType": "UTF8"
+								}
+							},
+							{
+								"source": {
+									"name": "invoice_date",
+									"type": "DateTime",
+									"physicalType": "date"
+								},
+								"sink": {
+									"name": "invoice_date",
+									"type": "DateTime",
+									"physicalType": "INT_96"
+								}
+							},
+							{
+								"source": {
+									"name": "quantity",
+									"type": "Int16",
+									"physicalType": "smallint"
+								},
+								"sink": {
+									"name": "quantity",
+									"type": "Int16",
+									"physicalType": "INT_32"
+								}
+							}
+						],
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "AzurePostgreSqlTable1",
+						"type": "DatasetReference"
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "parquet",
+						"type": "DatasetReference"
+					}
+				]
+			},
+			{
+				"name": "check_new_watermark",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": "SELECT MAX(modified_at) AS watermark FROM retail ",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "AzurePostgreSqlTable1",
+						"type": "DatasetReference"
+					}
+				}
+			},
+			{
+				"name": "check_old_watermark",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "DelimitedTextSource",
+						"storeSettings": {
+							"type": "AzureBlobStorageReadSettings",
+							"recursive": true,
+							"enablePartitionDiscovery": false
+						},
+						"formatSettings": {
+							"type": "DelimitedTextReadSettings"
+						}
+					},
+					"dataset": {
+						"referenceName": "watermarking",
+						"type": "DatasetReference"
+					}
+				}
+			},
+			{
+				"name": "update_watermark",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "DB_To_Parquet",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "SELECT '@{activity('check_new_watermark').output.firstRow.watermark}' AS watermark",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"sink": {
+						"type": "DelimitedTextSink",
+						"storeSettings": {
+							"type": "AzureBlobStorageWriteSettings"
+						},
+						"formatSettings": {
+							"type": "DelimitedTextWriteSettings",
+							"quoteAllText": true,
+							"fileExtension": ".txt"
+						}
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "AzurePostgreSqlTable1",
+						"type": "DatasetReference"
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "watermarking",
+						"type": "DatasetReference"
+					}
+				]
+			},
+			{
+				"name": "Set variable1",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "check_old_watermark",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "watermark",
+					"value": {
+						"value": "@activity('check_old_watermark').output.firstRow.watermark",
+						"type": "Expression"
+					}
+				}
+			}
+		],
+		"variables": {
+			"watermark": {
+				"type": "String",
+				"defaultValue": "1990-09-30T05:55:42.156668Z"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2022-09-30T09:57:54Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
